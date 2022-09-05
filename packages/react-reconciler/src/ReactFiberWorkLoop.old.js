@@ -2382,6 +2382,11 @@ function commitMutationEffects(
   }
 }
 
+/**
+ * dom 变更后，主要处理副作用队列中带有 Update | Callback 标记的 fiber 节点
+ * @param {*} root
+ * @param {*} committedLanes
+ */
 function commitLayoutEffects(root: FiberRoot, committedLanes: Lanes) {
   if (__DEV__) {
     if (enableDebugTracing) {
