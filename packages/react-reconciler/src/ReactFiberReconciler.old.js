@@ -247,6 +247,15 @@ export function createContainer(
   return createFiberRoot(containerInfo, tag, hydrate, hydrationCallbacks);
 }
 
+/**
+ * 串联了 react-dom 和 react-reconclier
+ * 重点关注: scheduleUpdateOnFiber
+ * @param {*} element
+ * @param {*} container
+ * @param {*} parentComponent
+ * @param {*} callback
+ * @returns
+ */
 export function updateContainer(
   element: ReactNodeList,
   container: OpaqueRoot,
@@ -256,6 +265,7 @@ export function updateContainer(
   if (__DEV__) {
     onScheduleRoot(container, element);
   }
+  // 获取当前时间戳，计算本次更新的优先级
   const current = container.current;
   const eventTime = requestEventTime();
   if (__DEV__) {
@@ -295,6 +305,7 @@ export function updateContainer(
     }
   }
 
+  // 设置 Fiber.updateQueue
   const update = createUpdate(eventTime, lane);
   // Caution: React DevTools currently depends on this property
   // being called "element".
@@ -315,6 +326,8 @@ export function updateContainer(
   }
 
   enqueueUpdate(current, update);
+
+  // 进入 reconclier 流程中的“输入”步骤，即 Scheduler 调度
   scheduleUpdateOnFiber(current, lane, eventTime);
 
   return lane;

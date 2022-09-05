@@ -63,6 +63,13 @@ function ReactDOMRoot(container: Container, options: void | RootOptions) {
   this._internalRoot = createRootImpl(container, ConcurrentRoot, options);
 }
 
+/**
+ * 创建 fiberRoot 对象
+ * 在三种模式下的 tag 是各不相同的，分别为：ConcurrentRoot，BlockingRoot，LegacyRoot
+ * @param {*} container
+ * @param {*} tag
+ * @param {*} options
+ */
 function ReactDOMBlockingRoot(
   container: Container,
   tag: RootTag,
@@ -131,7 +138,10 @@ function createRootImpl(
       options.hydrationOptions != null &&
       options.hydrationOptions.mutableSources) ||
     null;
+  // 创建 fiberRoot
   const root = createContainer(container, tag, hydrate, hydrationCallbacks);
+
+  // 标记 DOM 对象，把 DOM 和 Fiber 对象关联起来
   markContainerAsRoot(root.current, container);
   const containerNodeType = container.nodeType;
 

@@ -172,6 +172,17 @@ function warnOnInvalidCallback(callback: mixed, callerName: string): void {
   }
 }
 
+/**
+ * legacy mode render
+ * 1. 创建 ReactDOMBlockingRoot 实例，初始化 react 应用环境
+ * 2. 调用 updateContainer 进行更新
+ * @param {*} parentComponent
+ * @param {*} children
+ * @param {*} container
+ * @param {*} forceHydrate
+ * @param {*} callback
+ * @returns
+ */
 function legacyRenderSubtreeIntoContainer(
   parentComponent: ?React$Component<any, any>,
   children: ReactNodeList,

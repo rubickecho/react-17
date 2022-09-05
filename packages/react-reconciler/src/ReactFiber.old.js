@@ -428,6 +428,13 @@ export function resetWorkInProgress(workInProgress: Fiber, renderLanes: Lanes) {
   return workInProgress;
 }
 
+/**
+ * 设置 mode，由不同模式的 tag 决定
+ * fiber 树中的所有节点的 mode 都会和 HostRootFiber.mode 一致（新建的 fiber 节点，其 mode 来源于父节点）
+ * 所以 HostRootFiber.mode 很重要，决定了以后 Fiber 树的构建过程
+ * @param {*} tag
+ * @returns
+ */
 export function createHostRootFiber(tag: RootTag): Fiber {
   let mode;
   if (tag === ConcurrentRoot) {
