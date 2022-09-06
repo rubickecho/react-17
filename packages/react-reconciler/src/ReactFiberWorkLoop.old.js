@@ -697,15 +697,16 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   }
 
   // Check if there's an existing task. We may be able to reuse it.
+  // 节流防抖
   if (existingCallbackNode !== null) {
     const existingCallbackPriority = root.callbackPriority;
-    if (existingCallbackPriority === newCallbackPriority) {
+    if (existingCallbackPriority === newCallbackPriority) { // 节流：新旧优先级相同，代表同一 task 连续执行，则无需再注册 task
       // The priority hasn't changed. We can reuse the existing task. Exit.
       return;
     }
     // The priority changed. Cancel the existing callback. We'll schedule a new
     // one below.
-    cancelCallback(existingCallbackNode);
+    cancelCallback(existingCallbackNode); // 防抖：直接取消旧 task
   }
 
   // Schedule a new callback.

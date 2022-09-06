@@ -118,11 +118,19 @@ export function setCurrentUpdateLanePriority(newLanePriority: LanePriority) {
 // Used by getHighestPriorityLanes and getNextLanes:
 let return_highestLanePriority: LanePriority = DefaultLanePriority;
 
+/**
+ * 通过掩码的特性来判断二进制式变量间的关系
+ * @param {*} lanes
+ * @returns
+ */
 function getHighestPriorityLanes(lanes: Lanes | Lane): Lanes {
+  // 判断 lanes 中是否包含 SyncLane
   if ((SyncLane & lanes) !== NoLanes) {
     return_highestLanePriority = SyncLanePriority;
     return SyncLane;
   }
+
+  // 判断 lanes 中是否包含 SyncBatchedLane
   if ((SyncBatchedLane & lanes) !== NoLanes) {
     return_highestLanePriority = SyncBatchedLanePriority;
     return SyncBatchedLane;

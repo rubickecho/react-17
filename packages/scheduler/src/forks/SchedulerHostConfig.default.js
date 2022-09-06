@@ -7,13 +7,29 @@
 
 import {enableIsInputPending} from '../SchedulerFeatureFlags';
 
+// 请求及时回调: port.postMessage
 export let requestHostCallback;
+
+// 取消及时回调: scheduleHostCallback = null
 export let cancelHostCallback;
+
+// 请求延时回调: setTimeout
 export let requestHostTimeout;
+
+// 取消延时回调: cancelTimeout
 export let cancelHostTimeout;
+
+// 是否让出主线程(currentTime >= deadline && neddsPaint): 让浏览器能够执行更高优先级的任务
+// 比如 UI Paint, User Input 等等
 export let shouldYieldToHost;
+
+// 请求绘制: 设置 neddsPaint = true
 export let requestPaint;
+
+// 获取当前时间
 export let getCurrentTime;
+
+// 强制设置 yieldInterval（让出主线程的周期），几乎没有使用
 export let forceFrameRate;
 
 const hasPerformanceNow =
@@ -112,7 +128,7 @@ if (
   // thread, like user events. By default, it yields multiple times per frame.
   // It does not attempt to align with frame boundaries, since most tasks don't
   // need to be frame aligned; for those that do, use requestAnimationFrame.
-  let yieldInterval = 5;
+  let yieldInterval = 5; // 时间切片周期，默认 5ms（如果一个 task 运行超过该周期，下一个 task 执行之前，会把控制权归还给浏览器执行其他更紧急的任务）
   let deadline = 0;
 
   // TODO: Make this configurable
@@ -127,6 +143,7 @@ if (
     navigator.scheduling.isInputPending !== undefined
   ) {
     const scheduling = navigator.scheduling;
+    // 是否让出主线程
     shouldYieldToHost = function() {
       const currentTime = getCurrentTime();
       if (currentTime >= deadline) {
@@ -138,19 +155,19 @@ if (
         // regardless, since there could be a pending paint that wasn't
         // accompanied by a call to `requestPaint`, or other main thread tasks
         // like network events.
-        if (needsPaint || scheduling.isInputPending()) {
+        if (needsPaint || scheduling.isInputPending()) { // 绘制 or 用户输入
           // There is either a pending paint or a pending input.
           return true;
         }
         // There's no pending input. Only yield if we've reached the max
         // yield interval.
-        return currentTime >= maxYieldInterval;
+        return currentTime >= maxYieldInterval; // 时间到达最大时
       } else {
         // There's still time left in the frame.
         return false;
       }
     };
-
+    // 请求绘制
     requestPaint = function() {
       needsPaint = true;
     };
@@ -165,6 +182,7 @@ if (
     requestPaint = function() {};
   }
 
+  // 设置时间切片的周期
   forceFrameRate = function(fps) {
     if (fps < 0 || fps > 125) {
       // Using console['error'] to evade Babel and ESLint
@@ -178,30 +196,35 @@ if (
       yieldInterval = Math.floor(1000 / fps);
     } else {
       // reset the framerate
-      yieldInterval = 5;
+      yieldInterval = 5; // WHY 5? => reset default 5ms
     }
   };
 
+  /**
+   * 接收 MessageChannel 消息
+   */
   const performWorkUntilDeadline = () => {
     if (scheduledHostCallback !== null) {
       const currentTime = getCurrentTime();
       // Yield after `yieldInterval` ms, regardless of where we are in the vsync
       // cycle. This means there's always time remaining at the beginning of
       // the message event.
-      deadline = currentTime + yieldInterval;
+      deadline = currentTime + yieldInterval; // 设置让出线程期限时间
       const hasTimeRemaining = true;
       try {
+        // 执行 callback
         const hasMoreWork = scheduledHostCallback(
           hasTimeRemaining,
           currentTime,
         );
+        // 是否还有更多的任务
         if (!hasMoreWork) {
-          isMessageLoopRunning = false;
+          isMessageLoopRunning = false; // 关闭 work loop
           scheduledHostCallback = null;
         } else {
           // If there's more work, schedule the next message event at the end
           // of the preceding one.
-          port.postMessage(null);
+          port.postMessage(null); // 继续发送消息
         }
       } catch (error) {
         // If a scheduler task throws, exit the current browser task so the
@@ -217,18 +240,24 @@ if (
     needsPaint = false;
   };
 
+  // MessageChannel 在浏览器事件中属于 宏任务，所以调度中心永远都是异步执行回调函数
   const channel = new MessageChannel();
   const port = channel.port2;
-  channel.port1.onmessage = performWorkUntilDeadline;
-
+  channel.port1.onmessage = performWorkUntilDeadline; // 通过 MessageChannel 发消息的方式触发 performWorkUntilDeadline 函数，最后执行回调
+  /**
+   * 请求回调]
+   */
   requestHostCallback = function(callback) {
-    scheduledHostCallback = callback;
-    if (!isMessageLoopRunning) {
+    scheduledHostCallback = callback; // 保存回调，下一次执行
+    if (!isMessageLoopRunning) { // 如果消息循环没有运行，则初始化
       isMessageLoopRunning = true;
       port.postMessage(null);
     }
   };
 
+  /**
+   * 取消回调
+   */
   cancelHostCallback = function() {
     scheduledHostCallback = null;
   };

@@ -59,7 +59,7 @@ var LOW_PRIORITY_TIMEOUT = 10000;
 var IDLE_PRIORITY_TIMEOUT = maxSigned31BitInt;
 
 // Tasks are stored on a min heap
-var taskQueue = [];
+var taskQueue = []; // 任务管理队列
 var timerQueue = [];
 
 // Incrementing id counter. Used to maintain insertion order.
@@ -124,7 +124,7 @@ function flushWork(hasTimeRemaining, initialTime) {
   }
 
   // We'll need a host callback the next time work is scheduled.
-  isHostCallbackScheduled = false;
+  isHostCallbackScheduled = false; // 全局标记，表示进入 Sheduler 阶段
   if (isHostTimeoutScheduled) {
     // We scheduled a timeout but it's no longer needed. Cancel it.
     isHostTimeoutScheduled = false;
@@ -136,6 +136,7 @@ function flushWork(hasTimeRemaining, initialTime) {
   try {
     if (enableProfiling) {
       try {
+        // 循环消费队列
         return workLoop(hasTimeRemaining, initialTime);
       } catch (error) {
         if (currentTask !== null) {
@@ -150,6 +151,7 @@ function flushWork(hasTimeRemaining, initialTime) {
       return workLoop(hasTimeRemaining, initialTime);
     }
   } finally {
+    // 恢复全局状态
     currentTask = null;
     currentPriorityLevel = previousPriorityLevel;
     isPerformingWork = false;
@@ -160,18 +162,27 @@ function flushWork(hasTimeRemaining, initialTime) {
   }
 }
 
+/**
+ * 任务调度循环
+ * @param {*} hasTimeRemaining
+ * @param {*} initialTime
+ * @returns
+ */
 function workLoop(hasTimeRemaining, initialTime) {
-  let currentTime = initialTime;
+  let currentTime = initialTime; // 保存当前时间，用于判断任务是否过期
   advanceTimers(currentTime);
-  currentTask = peek(taskQueue);
+  currentTask = peek(taskQueue); // 获取队列中的第一个任务
+  // 任务调度循环开始
   while (
     currentTask !== null &&
     !(enableSchedulerDebugging && isSchedulerPaused)
   ) {
+    // 时间切片
     if (
       currentTask.expirationTime > currentTime &&
       (!hasTimeRemaining || shouldYieldToHost())
     ) {
+      // 虽然 currentTask 没有过期，但是执行时间超过了限制(5ms)，将会停止执行，让出主线程
       // This currentTask hasn't expired, and we've reached the deadline.
       break;
     }
@@ -181,20 +192,24 @@ function workLoop(hasTimeRemaining, initialTime) {
       currentPriorityLevel = currentTask.priorityLevel;
       const didUserCallbackTimeout = currentTask.expirationTime <= currentTime;
       if (enableProfiling) {
-        markTaskRun(currentTask, currentTime);
+        markTaskRun(currentTask, currentTime); // 标记任务运行
       }
+      // 执行回调
       const continuationCallback = callback(didUserCallbackTimeout);
       currentTime = getCurrentTime();
+      // 完成回调，检查是否还有子回调
       if (typeof continuationCallback === 'function') {
+        // 有子回调，比如 Fiber 树太大时，保留 currentTask，（可中断渲染）
         currentTask.callback = continuationCallback;
         if (enableProfiling) {
           markTaskYield(currentTask, currentTime);
         }
       } else {
         if (enableProfiling) {
-          markTaskCompleted(currentTask, currentTime);
+          markTaskCompleted(currentTask, currentTime); //  标记任务完成
           currentTask.isQueued = false;
         }
+        // 完成任务执行，移除队列
         if (currentTask === peek(taskQueue)) {
           pop(taskQueue);
         }
@@ -203,11 +218,12 @@ function workLoop(hasTimeRemaining, initialTime) {
     } else {
       pop(taskQueue);
     }
+    // 更新当前任务，继续从任务队列中取出第一个
     currentTask = peek(taskQueue);
   }
   // Return whether there's additional work
   if (currentTask !== null) {
-    return true;
+    return true; // 如果还有任务，则返回 true，等待调度中心下一次回调
   } else {
     const firstTimer = peek(timerQueue);
     if (firstTimer !== null) {
@@ -279,8 +295,15 @@ function unstable_wrapCallback(callback) {
   };
 }
 
+/**
+ * 创建任务
+ * @param {*} priorityLevel
+ * @param {*} callback
+ * @param {*} options
+ * @returns
+ */
 function unstable_scheduleCallback(priorityLevel, callback, options) {
-  var currentTime = getCurrentTime();
+  var currentTime = getCurrentTime(); // 获取当前时间
 
   var startTime;
   if (typeof options === 'object' && options !== null) {
@@ -293,7 +316,7 @@ function unstable_scheduleCallback(priorityLevel, callback, options) {
   } else {
     startTime = currentTime;
   }
-
+  // 根据传入的优先级，设置任务的过期时间 expirationTime
   var timeout;
   switch (priorityLevel) {
     case ImmediatePriority:
@@ -315,13 +338,13 @@ function unstable_scheduleCallback(priorityLevel, callback, options) {
   }
 
   var expirationTime = startTime + timeout;
-
+  // 创建新任务
   var newTask = {
-    id: taskIdCounter++,
-    callback,
-    priorityLevel,
-    startTime,
-    expirationTime,
+    id: taskIdCounter++, // 自增编号
+    callback, // 传入的回调函数
+    priorityLevel, // 优先级等级
+    startTime, // 创建 task 时的当前时间
+    expirationTime, // task 的过期时间，优先级越高，值越小
     sortIndex: -1,
   };
   if (enableProfiling) {
@@ -331,7 +354,7 @@ function unstable_scheduleCallback(priorityLevel, callback, options) {
   if (startTime > currentTime) {
     // This is a delayed task.
     newTask.sortIndex = startTime;
-    push(timerQueue, newTask);
+    push(timerQueue, newTask); // 加入任务队列
     if (peek(taskQueue) === null && newTask === peek(timerQueue)) {
       // All tasks are delayed, and this is the task with the earliest delay.
       if (isHostTimeoutScheduled) {
@@ -344,17 +367,18 @@ function unstable_scheduleCallback(priorityLevel, callback, options) {
       requestHostTimeout(handleTimeout, startTime - currentTime);
     }
   } else {
-    newTask.sortIndex = expirationTime;
-    push(taskQueue, newTask);
+    newTask.sortIndex = expirationTime; // 排序索引，等于过期时间，保证过期时间越小，越紧急的任务排在最前面
+    push(taskQueue, newTask); // 加入任务队列
     if (enableProfiling) {
       markTaskStart(newTask, currentTime);
       newTask.isQueued = true;
     }
     // Schedule a host callback, if needed. If we're already performing work,
     // wait until the next time we yield.
+    // 请求调度
     if (!isHostCallbackScheduled && !isPerformingWork) {
       isHostCallbackScheduled = true;
-      requestHostCallback(flushWork);
+      requestHostCallback(flushWork); // 消费任务
     }
   }
 
